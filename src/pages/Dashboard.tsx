@@ -25,7 +25,7 @@ export default function Dashboard() {
         <StatCard label="Nog na te kijken" value={String(openstaand)} icon={Clock} hint="Verslagen in de wachtrij" />
         <StatCard label="Nagekeken" value={String(nagekeken)} icon={CheckCircle2} hint="Deze week afgerond" />
         <StatCard label="Totaal ingeleverd" value={String(totaal)} icon={FileStack} hint="Alle klassen samen" />
-        <StatCard label="Hoog AI-risico" value={String(hoogRisico)} icon={Sparkles} hint="Ter controle, geen oordeel" />
+        <StatCard label="Hoog AI-risico" value={String(hoogRisico)} icon={Sparkles} hint="Verdient extra aandacht" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
