@@ -1,5 +1,6 @@
-import { CheckCircle2, FileText, Search } from 'lucide-react'
+import { CheckCircle2, FileText, Search, Sparkles } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import AiFeedbackPanel from '../components/AiFeedbackPanel'
 import AiRisicoBadge from '../components/AiRisicoBadge'
 import { type Inlevering, inleveringen as initieleInleveringen, rubric } from '../data/mockData'
 
@@ -47,6 +48,19 @@ export default function Nakijken() {
     setOpgeslagen(false)
   }
 
+  function gebruikAlsFeedback() {
+    const { sterkePunten, verbeterpunten } = geselecteerd.aiFeedback
+    const tekst = [
+      'Wat ging goed:',
+      ...sterkePunten.map((p) => `+ ${p}`),
+      '',
+      'Wat kan beter:',
+      ...verbeterpunten.map((p) => `+ ${p}`),
+    ].join('\n')
+    setFeedback(tekst)
+    setOpgeslagen(false)
+  }
+
   const alleScoresIngevuld = rubric.every((c) => typeof scores[c.id] === 'number')
   const cijfer = alleScoresIngevuld ? berekenCijfer(scores) : null
 
@@ -67,8 +81,8 @@ export default function Nakijken() {
       <div>
         <h1 className="text-2xl font-semibold text-[#2b1245] md:text-3xl">Nakijken</h1>
         <p className="mt-1 text-paars-500">
-          Beoordeel verslagen aan de hand van de rubric. Jij houdt altijd de regie over het
-          eindcijfer.
+          De AI geeft per verslag concept-feedback als startpunt. Jij weegt de punten en houdt
+          altijd de regie over de beoordeling.
         </p>
       </div>
 
@@ -157,6 +171,12 @@ export default function Nakijken() {
             </div>
           </div>
 
+          <AiFeedbackPanel
+            key={geselecteerd.id}
+            aiFeedback={geselecteerd.aiFeedback}
+            onGebruikAlsFeedback={gebruikAlsFeedback}
+          />
+
           <div className="rounded-2xl border border-paars-100 bg-white p-5 shadow-sm shadow-paars-100/50">
             <h2 className="mb-4 text-lg font-semibold text-[#2b1245]">Beoordeling</h2>
 
@@ -184,6 +204,25 @@ export default function Nakijken() {
                     className="w-full accent-paars-600"
                   />
                   <p className="mt-1 text-xs text-paars-400">{criterium.omschrijving}</p>
+                  {geselecteerd.aiFeedback.criteriumSuggesties[criterium.id] && (
+                    <div className="mt-2 flex items-start justify-between gap-3 rounded-lg bg-paars-50/60 px-3 py-2">
+                      <p className="flex items-start gap-1.5 text-xs text-paars-600">
+                        <Sparkles size={12} className="mt-0.5 shrink-0" />
+                        <span>
+                          AI-indicatie: <strong>{geselecteerd.aiFeedback.criteriumSuggesties[criterium.id].score}</strong>{' '}
+                          — {geselecteerd.aiFeedback.criteriumSuggesties[criterium.id].toelichting}
+                        </span>
+                      </p>
+                      <button
+                        onClick={() =>
+                          updateScore(criterium.id, geselecteerd.aiFeedback.criteriumSuggesties[criterium.id].score)
+                        }
+                        className="shrink-0 text-xs font-medium text-paars-700 underline decoration-paars-300 underline-offset-2 hover:text-paars-900"
+                      >
+                        Gebruik score
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
