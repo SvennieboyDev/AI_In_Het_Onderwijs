@@ -4,5 +4,6 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/AI_In_Het_Onderwijs/',
   plugins: [react(), tailwindcss()],
 })
