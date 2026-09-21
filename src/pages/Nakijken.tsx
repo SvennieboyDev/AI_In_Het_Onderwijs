@@ -6,9 +6,12 @@ import { type Inlevering, inleveringen as initieleInleveringen, rubric } from '.
 
 type Filter = 'openstaand' | 'nagekeken' | 'alle'
 
-function berekenCijfer(scores: Record<string, number>) {
-  const totaal = rubric.reduce((som, c) => som + (scores[c.id] ?? 0) * c.weging, 0)
-  return Math.round(totaal * 10) / 10
+function berekenCijfer(scores: Record<string, number>, maxPunten: Record<string, number>) {
+  const totaalMax = rubric.reduce((som, c) => som + (maxPunten[c.id] ?? c.maxPunten), 0)
+  const totaalBehaald = rubric.reduce((som, c) => som + (scores[c.id] ?? 0), 0)
+  if (totaalMax === 0) return null
+  const cijfer = 1 + 9 * (totaalBehaald / totaalMax)
+  return Math.round(Math.min(10, Math.max(1, cijfer)) * 10) / 10
 }
 
 export default function Nakijken() {
@@ -19,8 +22,10 @@ export default function Nakijken() {
     initieleInleveringen.find((i) => i.status === 'nog na te kijken')?.id ?? initieleInleveringen[0].id,
   )
 
+  const [maxPunten, setMaxPunten] = useState<Record<string, number>>(
+    Object.fromEntries(rubric.map((c) => [c.id, c.maxPunten])),
+  )
   const [scores, setScores] = useState<Record<string, number>>({})
-  const [feedback, setFeedback] = useState('')
   const [opgeslagen, setOpgeslagen] = useState(false)
 
   const gefilterd = useMemo(() => {
@@ -39,52 +44,57 @@ export default function Nakijken() {
   function selecteer(item: Inlevering) {
     setGeselecteerdId(item.id)
     setScores(item.scores ?? {})
-    setFeedback(item.feedback ?? '')
     setOpgeslagen(false)
   }
 
-  function updateScore(criteriumId: string, waarde: number) {
-    setScores((prev) => ({ ...prev, [criteriumId]: waarde }))
+  function updateScore(criteriumId: string, waarde: number | null) {
+    setScores((prev) => {
+      const next = { ...prev }
+      if (waarde === null) {
+        delete next[criteriumId]
+      } else {
+        next[criteriumId] = waarde
+      }
+      return next
+    })
     setOpgeslagen(false)
   }
 
-  function gebruikAlsFeedback() {
-    const { sterkePunten, verbeterpunten } = geselecteerd.aiFeedback
-    const tekst = [
-      'Wat ging goed:',
-      ...sterkePunten.map((p) => `+ ${p}`),
-      '',
-      'Wat kan beter:',
-      ...verbeterpunten.map((p) => `+ ${p}`),
-    ].join('\n')
-    setFeedback(tekst)
+  function updateMaxPunten(criteriumId: string, waarde: number) {
+    setMaxPunten((prev) => ({ ...prev, [criteriumId]: waarde }))
+    setOpgeslagen(false)
+  }
+
+  function vulAllesIn() {
+    const suggesties = geselecteerd.aiFeedback.criteriumSuggesties
+    setScores((prev) => {
+      const next = { ...prev }
+      for (const criterium of rubric) {
+        if (suggesties[criterium.id]) {
+          next[criterium.id] = suggesties[criterium.id].punten
+        }
+      }
+      return next
+    })
     setOpgeslagen(false)
   }
 
   const alleScoresIngevuld = rubric.every((c) => typeof scores[c.id] === 'number')
-  const cijfer = alleScoresIngevuld ? berekenCijfer(scores) : null
+  const totaalBehaald = rubric.reduce((som, c) => som + (scores[c.id] ?? 0), 0)
+  const totaalMax = rubric.reduce((som, c) => som + maxPunten[c.id], 0)
+  const cijfer = alleScoresIngevuld ? berekenCijfer(scores, maxPunten) : null
 
   function opslaan() {
     if (!cijfer) return
     setInleveringen((prev) =>
-      prev.map((i) =>
-        i.id === geselecteerd.id
-          ? { ...i, status: 'nagekeken', scores, feedback, cijfer }
-          : i,
-      ),
+      prev.map((i) => (i.id === geselecteerd.id ? { ...i, status: 'nagekeken', scores, cijfer } : i)),
     )
     setOpgeslagen(true)
   }
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-[#2b1245] md:text-3xl">Nakijken</h1>
-        <p className="mt-1 text-paars-500">
-          De AI geeft per verslag concept-feedback als startpunt. Jij weegt de punten en houdt
-          altijd de regie over de beoordeling.
-        </p>
-      </div>
+      <h1 className="text-2xl font-semibold text-[#2b1245] md:text-3xl">Nakijken</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr] lg:items-start">
         {/* Lijst met inleveringen */}
@@ -171,81 +181,80 @@ export default function Nakijken() {
             </div>
           </div>
 
-          <AiFeedbackPanel
-            key={geselecteerd.id}
-            aiFeedback={geselecteerd.aiFeedback}
-            onGebruikAlsFeedback={gebruikAlsFeedback}
-          />
+          <AiFeedbackPanel key={geselecteerd.id} aiFeedback={geselecteerd.aiFeedback} onVulAllesIn={vulAllesIn} />
 
           <div className="rounded-2xl border border-paars-100 bg-white p-5 shadow-sm shadow-paars-100/50">
             <h2 className="mb-4 text-lg font-semibold text-[#2b1245]">Beoordeling</h2>
 
             <div className="flex flex-col gap-5">
-              {rubric.map((criterium) => (
-                <div key={criterium.id}>
-                  <div className="mb-1 flex items-center justify-between">
-                    <label className="text-sm font-medium text-[#2b1245]">
-                      {criterium.naam}
-                      <span className="ml-2 text-xs font-normal text-paars-300">
-                        weegt {Math.round(criterium.weging * 100)}%
-                      </span>
-                    </label>
-                    <span className="w-10 text-right text-sm font-semibold text-paars-700">
-                      {scores[criterium.id] ?? '–'}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={10}
-                    step={0.5}
-                    value={scores[criterium.id] ?? 5.5}
-                    onChange={(e) => updateScore(criterium.id, Number(e.target.value))}
-                    className="w-full accent-paars-600"
-                  />
-                  <p className="mt-1 text-xs text-paars-400">{criterium.omschrijving}</p>
-                  {geselecteerd.aiFeedback.criteriumSuggesties[criterium.id] && (
-                    <div className="mt-2 flex items-start justify-between gap-3 rounded-lg bg-paars-50/60 px-3 py-2">
-                      <p className="flex items-start gap-1.5 text-xs text-paars-600">
-                        <Sparkles size={12} className="mt-0.5 shrink-0" />
-                        <span>
-                          AI-indicatie: <strong>{geselecteerd.aiFeedback.criteriumSuggesties[criterium.id].score}</strong>{' '}
-                          — {geselecteerd.aiFeedback.criteriumSuggesties[criterium.id].toelichting}
-                        </span>
-                      </p>
-                      <button
-                        onClick={() =>
-                          updateScore(criterium.id, geselecteerd.aiFeedback.criteriumSuggesties[criterium.id].score)
-                        }
-                        className="shrink-0 text-xs font-medium text-paars-700 underline decoration-paars-300 underline-offset-2 hover:text-paars-900"
-                      >
-                        Gebruik score
-                      </button>
+              {rubric.map((criterium) => {
+                const suggestie = geselecteerd.aiFeedback.criteriumSuggesties[criterium.id]
+                return (
+                  <div key={criterium.id} className="border-b border-paars-100 pb-5 last:border-0 last:pb-0">
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <label className="text-sm font-medium text-[#2b1245]">{criterium.naam}</label>
+                      <div className="flex items-center gap-1.5 text-xs text-paars-400">
+                        van
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={maxPunten[criterium.id]}
+                          onChange={(e) => updateMaxPunten(criterium.id, Number(e.target.value))}
+                          className="w-14 rounded-lg border border-paars-100 px-2 py-1 text-center text-sm text-[#2b1245] focus:border-paars-400 focus:outline-none"
+                        />
+                        punten
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    <p className="text-xs text-paars-400">{criterium.omschrijving}</p>
 
-            <div className="mt-6">
-              <label className="mb-1 block text-sm font-medium text-[#2b1245]">
-                Feedback voor de leerling
-              </label>
-              <textarea
-                value={feedback}
-                onChange={(e) => {
-                  setFeedback(e.target.value)
-                  setOpgeslagen(false)
-                }}
-                rows={4}
-                placeholder="Geef constructieve feedback: wat ging goed, en wat kan beter?"
-                className="w-full resize-none rounded-xl border border-paars-100 bg-paars-50/40 p-3 text-sm text-[#2b1245] placeholder:text-paars-300 focus:border-paars-400 focus:outline-none"
-              />
+                    {suggestie && (
+                      <div className="mt-2 flex items-start justify-between gap-3 rounded-lg bg-paars-50/60 px-3 py-2">
+                        <p className="flex items-start gap-1.5 text-xs text-paars-600">
+                          <Sparkles size={12} className="mt-0.5 shrink-0" />
+                          <span>
+                            AI-voorstel: <strong>{suggestie.punten}</strong> punten — {suggestie.toelichting}
+                          </span>
+                        </p>
+                        <button
+                          onClick={() => updateScore(criterium.id, suggestie.punten)}
+                          className="shrink-0 text-xs font-medium text-paars-700 underline decoration-paars-300 underline-offset-2 hover:text-paars-900"
+                        >
+                          Gebruik
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex items-center gap-2">
+                      <label className="text-xs font-medium text-paars-500">Toegekende punten</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={maxPunten[criterium.id]}
+                        step={0.5}
+                        value={scores[criterium.id] ?? ''}
+                        onChange={(e) =>
+                          updateScore(criterium.id, e.target.value === '' ? null : Number(e.target.value))
+                        }
+                        placeholder="–"
+                        className="w-20 rounded-lg border border-paars-200 px-2 py-1.5 text-center text-sm font-semibold text-[#2b1245] focus:border-paars-400 focus:outline-none"
+                      />
+                      <span className="text-xs text-paars-400">/ {maxPunten[criterium.id]}</span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-paars-100 pt-4">
               <div>
-                <p className="text-xs text-paars-400">Berekend eindcijfer</p>
+                <p className="text-xs text-paars-400">Totaal</p>
+                <p className="text-2xl font-semibold text-[#2b1245]">
+                  {totaalBehaald} <span className="text-base font-normal text-paars-300">/ {totaalMax} punten</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-paars-400">Cijfer</p>
                 <p className="text-3xl font-semibold text-[#2b1245]">
                   {cijfer ?? '–'}
                   {cijfer && <span className="text-base font-normal text-paars-300"> / 10</span>}
@@ -264,10 +273,6 @@ export default function Nakijken() {
                 </button>
               </div>
             </div>
-            <p className="mt-3 text-xs text-paars-300">
-              Het cijfer is een startpunt op basis van de rubric — jij bepaalt en past het eindoordeel
-              altijd zelf aan.
-            </p>
           </div>
         </div>
       </div>

@@ -17,7 +17,6 @@ export default function AiRisicoBadge({ risico }: { risico: AiRisico }) {
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${styles[risico]}`}
-      title="Indicatieve inschatting — geen definitief oordeel. Eindbeslissing ligt bij de docent."
     >
       <Sparkles size={12} />
       {labels[risico]}
